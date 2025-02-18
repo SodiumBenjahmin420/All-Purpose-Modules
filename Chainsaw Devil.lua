@@ -8,11 +8,11 @@ local env = getgenv()
 if not env.ChainSawDevilCache then
     env.ChainSawDevilCache = {
         Executions = {}, -- Stores all Chainsaw Devil instances
-        ActiveExecutionId = nil, -- Tracks the currently active execution
-        LastCreatedId = nil -- Tracks the most recently created execution ID
+        ActiveExecutionId = nil -- Tracks the currently active execution
     }
 end
 
+-- Type definitions for better code understanding
 export type ConsumableType = "connection" | "instance" | "signal" | "unknown"
 export type Consumable = {
     item: any,
@@ -22,7 +22,7 @@ export type Consumable = {
 export type Execution = {
     Id: string,
     Name: string,
-    Consumables: {[any]: Consumable},
+    Consumables: {[any]: Consumable},  -- Using table lookup instead of array
     Active: boolean
 }
 
@@ -54,19 +54,8 @@ function ChainsawDevil.new(ExecutionName: string?)
     -- Store the execution in global cache
     env.ChainSawDevilCache.Executions[executionId] = self
     env.ChainSawDevilCache.ActiveExecutionId = executionId
-    env.ChainSawDevilCache.LastCreatedId = executionId
     
     return self
-end
-
--- Get the execution ID of the most recently created instance
-function ChainsawDevil.GetLastCreatedId(): string?
-    return env.ChainSawDevilCache.LastCreatedId
-end
-
--- Get an execution by its ID
-function ChainsawDevil.GetExecution(executionId: string): Execution?
-    return env.ChainSawDevilCache.Executions[executionId]
 end
 
 -- Get the currently active execution
@@ -81,7 +70,83 @@ function ChainsawDevil.SetActive(executionId: string)
     env.ChainSawDevilCache.ActiveExecutionId = executionId
 end
 
--- Rest of the implementation remains the same...
--- (Eat, Digest, Cleanup, CleanupAll methods stay unchanged)
+-- Consumes (tracks) a new item for later cleanup
+-- Returns the connection/instance/signal for chainable operations
+function ChainsawDevil:Eat(item: any, callback: (...any) -> any): any
+    assert(self.Active, "Cannot eat new items with an inactive Chainsaw Devil")
+    
+    local consumableType = getConsumableType(item)
+    assert(consumableType ~= "unknown", "Cannot consume unknown item type")
+    
+    local result
+    
+    -- Handle different types of consumables
+    if consumableType == "connection" then
+        result = item
+    elseif consumableType == "instance" then
+        result = item
+    elseif callback and consumableType ~= "signal" then
+        result = item:Connect(callback)
+        consumableType = "connection"
+    else
+        result = item
+    end
+    
+    -- Store the consumable with direct table lookup
+    self.Consumables[result] = {
+        item = result,
+        type = consumableType
+    }
+    
+    return result
+end
+
+-- Cleans up a specific item using direct table lookup
+function ChainsawDevil:Digest(item: any)
+    assert(self.Active, "Cannot digest items with an inactive Chainsaw Devil")
+    
+    local consumable = self.Consumables[item]
+    if consumable then
+        if consumable.type == "connection" and consumable.item.Connected then
+            consumable.item:Disconnect()
+        elseif (consumable.type == "instance" or consumable.type == "signal") and not consumable.item.Destroying then
+            consumable.item:Destroy()
+        end
+        self.Consumables[item] = nil
+    end
+end
+
+-- Cleans up everything tracked by this Chainsaw Devil instance
+function ChainsawDevil:Cleanup()
+    if not self.Active then return end
+    
+    -- Clean up all consumables
+    for _, consumable in pairs(self.Consumables) do
+        if consumable.type == "connection" and consumable.item.Connected then
+            consumable.item:Disconnect()
+        elseif (consumable.type == "instance" or consumable.type == "signal") and not consumable.item.Destroying then
+            consumable.item:Destroy()
+        end
+    end
+    
+    -- Clear the consumables table
+    table.clear(self.Consumables)
+    self.Active = false
+    
+    -- Remove from global cache
+    env.ChainSawDevilCache.Executions[self.ExecutionId] = nil
+    if env.ChainSawDevilCache.ActiveExecutionId == self.ExecutionId then
+        env.ChainSawDevilCache.ActiveExecutionId = nil
+    end
+end
+
+-- Clean up all executions
+function ChainsawDevil.CleanupAll()
+    for _, execution in pairs(env.ChainSawDevilCache.Executions) do
+        execution:Cleanup()
+    end
+    table.clear(env.ChainSawDevilCache.Executions)
+    env.ChainSawDevilCache.ActiveExecutionId = nil
+end
 
 return ChainsawDevil
