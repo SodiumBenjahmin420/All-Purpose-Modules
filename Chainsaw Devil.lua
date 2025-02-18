@@ -125,7 +125,7 @@ function ChainsawDevil:Eat(item: any, callback: (...any) -> any): any
     debugLog("Consume", string.format("Item consumed by %s", self.Name), {
         type = consumableType,
         itemType = typeof(result),
-        totalConsumables = #table.keys(self.Consumables)
+        totalConsumables = #(self.Consumables)
     })
     
     return result
