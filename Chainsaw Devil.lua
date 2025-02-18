@@ -140,6 +140,27 @@ function ChainsawDevil:Cleanup()
     end
 end
 
+function ChainsawDevil.CleanupGlobal(Name: string)
+    -- Create a temporary table to store executions to clean up
+    -- This prevents modification of the table while iterating
+    local executionsToCleanup = {}
+    
+    -- Gather all executions that match the name
+    for id, execution in pairs(env.ChainSawDevilCache.Executions) do
+        if execution.Name == Name then
+            table.insert(executionsToCleanup, execution)
+        end
+    end
+    
+    -- Clean up all matching executions
+    for _, execution in ipairs(executionsToCleanup) do
+        execution:Cleanup()
+    end
+    
+    -- If the active execution was cleaned up, it will already be nil
+    -- due to the Cleanup() function handling that
+end
+
 -- Clean up all executions
 function ChainsawDevil.CleanupAll()
     for _, execution in pairs(env.ChainSawDevilCache.Executions) do
